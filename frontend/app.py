@@ -4,6 +4,33 @@ import requests
 
 BASE_URL = "http://127.0.0.1:8000"
 
+# ---------------- SESSION STATE ----------------
+
+if "experiences" not in st.session_state:
+    st.session_state.experiences = [
+        {
+            "job_title": "",
+            "company": "",
+            "location": "",
+            "start_date": "",
+            "end_date": "",
+            "description": "",
+            "ai_description": [],
+            "is_current": False
+        }
+    ]
+
+if "education" not in st.session_state:
+    st.session_state.education = [
+        {
+            "college": "",
+            "degree": "",
+            "field_of_study": "",
+            "start_year": "",
+            "end_year": ""
+        }
+    ]
+
 
 def render_resume_preview(resume):
     user = resume.get("user", {})
@@ -84,33 +111,160 @@ summary = st.text_area("Professional Summary")
 # ---------------- EXPERIENCE ----------------
 st.header("💼 Experience")
 
-job_title = st.text_input("Job Title")
-company = st.text_input("Company")
-location = st.text_input("Location")
+for i, exp in enumerate(st.session_state.experiences):
 
-col1, col2 = st.columns(2)
-with col1:
-    start_date = st.text_input("Start Date (e.g. Jan 2023)")
-with col2:
-    end_date = st.text_input("End Date (or Present)")
+    st.subheader(f"Experience {i+1}")
 
-is_current = st.checkbox("Currently working here")
+    col1, col2 = st.columns(2)
 
-description = st.text_area("Experience Description",
-                           value=st.session_state.get("enhanced_description", ""))
+    with col1:
+        exp["job_title"] = st.text_input(
+            "Job Title",
+            value=exp.get("job_title", ""),
+            key=f"job_title_{i}"
+        )
 
+        exp["company"] = st.text_input(
+            "Company",
+            value=exp.get("company", ""),
+            key=f"company_{i}"
+        )
+
+        exp["location"] = st.text_input(
+            "Location",
+            value=exp.get("location", ""),
+            key=f"location_{i}"
+        )
+
+    with col2:
+        exp["start_date"] = st.text_input(
+            "Start Date",
+            value=exp.get("start_date", ""),
+            key=f"start_date_{i}"
+        )
+
+        exp["end_date"] = st.text_input(
+            "End Date",
+            value=exp.get("end_date", ""),
+            key=f"end_date_{i}"
+        )
+
+    exp["is_current"] = st.checkbox(
+        "Currently Working Here",
+        value=exp.get("is_current", False),
+        key=f"is_current_{i}"
+    )
+
+    exp["description"] = st.text_area(
+        "Experience Description",
+        value=exp.get("description", ""),
+        key=f"description_{i}"
+    )
+    if st.button("✨ Enhance Experience", key=f"enhance_{i}"):
+        try:
+            res = requests.post(f"{BASE_URL}/ai/enhance", 
+                                json={
+                                    "text": exp["description"],
+                                    "style": "professional"
+                                })
+            data = res.json()
+            if data["success"]:
+                bullets = data["data"]["bullets"]
+                exp["ai_description"] = bullets
+                st.success("AI Enhanced Experience!")
+                for b in bullets:
+                    st.write(f"- {b}")
+            else:
+                st.error(data.get("message", "Failed to enhance experience"))        
+                
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+
+    # REMOVE BUTTON
+    if len(st.session_state.experiences) > 1:
+        if st.button(f"❌ Remove Experience {i+1}", key=f"remove_exp_{i}"):
+            st.session_state.experiences.pop(i)
+            st.rerun()
+
+    st.divider()
+
+# ADD EXPERIENCE BUTTON
+if st.button("➕ Add Experience"):
+    st.session_state.experiences.append({
+        "job_title": "",
+        "company": "",
+        "location": "",
+        "start_date": "",
+        "end_date": "",
+        "description": "",
+        "ai_description": [],
+        "is_current": False
+    })
+
+    st.rerun()
+
+# ---------------- EDUCATION ----------------
 # ---------------- EDUCATION ----------------
 st.header("🎓 Education")
 
-college = st.text_input("College")
-degree = st.text_input("Degree")
-field_of_study = st.text_input("Field of Study")
+for i, edu in enumerate(st.session_state.education):
 
-col3, col4 = st.columns(2)
-with col3:
-    start_year = st.text_input("Start Year")
-with col4:
-    end_year = st.text_input("End Year")
+    st.subheader(f"Education {i+1}")
+
+    edu["college"] = st.text_input(
+        "College",
+        value=edu.get("college", ""),
+        key=f"college_{i}"
+    )
+
+    edu["degree"] = st.text_input(
+        "Degree",
+        value=edu.get("degree", ""),
+        key=f"degree_{i}"
+    )
+
+    edu["field_of_study"] = st.text_input(
+        "Field of Study",
+        value=edu.get("field_of_study", ""),
+        key=f"field_{i}"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        edu["start_year"] = st.text_input(
+            "Start Year",
+            value=edu.get("start_year", ""),
+            key=f"start_year_{i}"
+        )
+
+    with col2:
+        edu["end_year"] = st.text_input(
+            "End Year",
+            value=edu.get("end_year", ""),
+            key=f"end_year_{i}"
+        )
+
+    # REMOVE BUTTON
+    if len(st.session_state.education) > 1:
+        if st.button(f"❌ Remove Education {i+1}", key=f"remove_edu_{i}"):
+            st.session_state.education.pop(i)
+            st.rerun()
+
+    st.divider()
+
+# ADD EDUCATION BUTTON
+if st.button("➕ Add Education"):
+    st.session_state.education.append({
+        "college": "",
+        "degree": "",
+        "field_of_study": "",
+        "start_year": "",
+        "end_year": ""
+    })
+
+    st.rerun()
 
 # ---------------- SKILLS ----------------
 st.header("🛠 Skills")
@@ -118,31 +272,6 @@ st.header("🛠 Skills")
 skills_input = st.text_input("Skills (comma separated)")
 
 # ---------------- AI ENHANCEMENT ----------------
-if st.button("✨ Enhance Experience"):
-    try:
-        res = requests.post(
-            f"{BASE_URL}/ai/enhance",
-            json={
-                "text": description,
-                "style": "professional"
-            }
-        )
-
-        data = res.json()
-
-        if data["success"]:
-            bullets = data["data"]["bullets"]
-            st.session_state["enhanced_description"] = "\n".join(bullets)
-
-            st.success("AI Enhanced:")
-            for b in bullets:
-                st.write(f". {b}")
-        else:
-            st.error(data.get("message", "AI enhancement failed"))
-            st.write(data.get("data"))
-
-    except Exception as e:
-        st.error(f"Error: {e}")
 
 # ---------------- CREATE RESUME ----------------
 if st.button("Create Resume"):
@@ -156,26 +285,8 @@ if st.button("Create Resume"):
             "phone": phone
         },
         "summary": summary,
-        "experiences": [
-            {
-                "job_title": job_title,
-                "company": company,
-                "location": location,
-                "start_date": start_date if start_date else None,
-                "end_date": end_date if end_date else None,
-                "description": description,
-                "is_current": is_current
-            }
-        ],
-        "education": [
-            {
-                "college": college,
-                "degree": degree,
-                "field_of_study": field_of_study,
-                "start_year": start_year,
-                "end_year": end_year
-            }
-        ],
+        "experiences": st.session_state.experiences,
+        "education": st.session_state.education,
         "skills": skills_list
     }
 

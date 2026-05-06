@@ -3,6 +3,7 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
+import json
 
 
 def clean_text(value):
@@ -13,11 +14,38 @@ def extract_bullets(ai_desc):
     if not ai_desc:
         return []
 
+    if isinstance(ai_desc, str):
+        text = ai_desc.strip()
+        if not text:
+            return []
+
+        try:
+            ai_desc = json.loads(text)
+        except json.JSONDecodeError:
+            return [
+                line.lstrip("-\u2022* ").strip()
+                for line in text.splitlines()
+                if line.strip()
+            ]
+
     if isinstance(ai_desc, dict):
-        return ai_desc.get("bullets", [])
+        for key in ("bullets", "data", "bullet", "text"):
+            if key in ai_desc:
+                ai_desc = ai_desc[key]
+                break
+        else:
+            return []
 
     if isinstance(ai_desc, list):
-        return ai_desc
+        bullets = []
+        for item in ai_desc:
+            if isinstance(item, str):
+                bullets.append(item)
+            elif isinstance(item, dict):
+                bullets.extend(extract_bullets(item))
+            elif item:
+                bullets.append(str(item))
+        return bullets
 
     return []
 
@@ -125,9 +153,14 @@ def generate_resume_pdf(resume):
 
             if bullets:
                 for b in bullets:
-                    elements.append(Paragraph(f"• {clean_text(b)}", bullet_style))
+                    elements.append(Paragraph(f"\u2022 {clean_text(b)}", bullet_style))
             elif exp.description:
-                elements.append(Paragraph(clean_text(exp.description), normal_style))
+                description_bullets = extract_bullets(exp.description)
+                if description_bullets:
+                    for b in description_bullets:
+                        elements.append(Paragraph(f"\u2022 {clean_text(b)}", bullet_style))
+                else:
+                    elements.append(Paragraph(clean_text(exp.description), normal_style))
 
             elements.append(Spacer(1, 4))
 
