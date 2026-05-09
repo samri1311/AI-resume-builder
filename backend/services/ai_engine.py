@@ -49,6 +49,10 @@ def enhance_experience(text: str, style: str = "professional") -> dict:
         {{
           "bullets": ["...", "...", "..."]
         }}
+
+        Return ONLY valid JSON.
+        Do not include markdown.
+        Do not include ```json.
         """
 
         response = client.chat.completions.create(
