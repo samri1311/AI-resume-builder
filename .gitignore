@@ -1,2 +1,4 @@
 *.pdf
 .env
+v-resume
+/__pycache__
