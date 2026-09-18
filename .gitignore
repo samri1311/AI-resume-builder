@@ -4,3 +4,4 @@ v-resume
 __pycache__/
 *.pyc
 venv/
+resumes.db
