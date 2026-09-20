@@ -29,7 +29,9 @@ def create_resume(resume: ResumeCreate, db: Session = Depends(get_db)):
                 joinedload(models.Resume.user),
                 joinedload(models.Resume.experiences),
                 joinedload(models.Resume.education),
-                joinedload(models.Resume.skills)
+                joinedload(models.Resume.skills),
+                joinedload(models.Resume.certifications),
+                joinedload(models.Resume.awards)
             )
             .filter(models.Resume.id == db_resume.id)
             .first()
@@ -56,7 +58,9 @@ def get_resume(resume_id: int, db: Session = Depends(get_db)):
             joinedload(models.Resume.user),
             joinedload(models.Resume.experiences),
             joinedload(models.Resume.education),
-            joinedload(models.Resume.skills)
+            joinedload(models.Resume.skills),
+            joinedload(models.Resume.certifications),
+            joinedload(models.Resume.awards)
         )
         .filter(models.Resume.id == resume_id)
         .first()

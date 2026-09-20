@@ -1,8 +1,24 @@
 # backend/services/resume_service.py
 
+import asyncio
+
 from sqlalchemy.orm import Session
 from backend.database import models
-from backend.services.ai_engine import enhance_experience
+from backend.services.ai_engine import enhance_experience_async
+
+
+async def _enhance_or_skip(description):
+    if not description:
+        return {"success": False, "data": []}
+    return await enhance_experience_async(description)
+
+
+async def _enhance_all(experiences):
+    # asyncio.gather() must be called from inside a running event loop —
+    # building the gather() call before asyncio.run() has started one
+    # raises "a coroutine was expected, got <_GatheringFuture ...>", so this
+    # wrapper is what actually gets handed to asyncio.run() below.
+    return await asyncio.gather(*[_enhance_or_skip(exp.description) for exp in experiences])
 
 
 def create_resume_service(db: Session, resume):
@@ -16,7 +32,8 @@ def create_resume_service(db: Session, resume):
         db_user = models.User(
             name=resume.user.name,
             email=resume.user.email,
-            phone=resume.user.phone
+            phone=resume.user.phone,
+            website=resume.user.website
         )
         db.add(db_user)
         db.flush()
@@ -24,18 +41,22 @@ def create_resume_service(db: Session, resume):
     # 🔹 2. Create Resume
     db_resume = models.Resume(
         user_id=db_user.id,
+        title=resume.title,
         summary=resume.summary
     )
     db.add(db_resume)
     db.flush()
 
-    # 🔹 3. Experiences
-    for exp in resume.experiences:
+    # 🔹 3. Experiences — enhance every experience's description concurrently
+    # (one Groq round-trip in parallel per experience) instead of awaiting
+    # them one at a time, so a resume with several jobs listed doesn't wait
+    # on N sequential AI calls. This function itself stays a plain `def`
+    # (FastAPI runs it in a worker thread), so asyncio.run() here starts its
+    # own event loop just for this batch — it doesn't touch or block the
+    # app's main event loop.
+    ai_results = asyncio.run(_enhance_all(resume.experiences))
 
-        ai_result = (
-            enhance_experience(exp.description)
-            if exp.description else {"success": False, "data": []}
-        )
+    for exp, ai_result in zip(resume.experiences, ai_results):
 
         db_exp = models.Experience(
             resume_id=db_resume.id,
@@ -59,7 +80,8 @@ def create_resume_service(db: Session, resume):
             degree=edu.degree,
             field_of_study=edu.field_of_study,
             start_year=edu.start_year,
-            end_year=edu.end_year
+            end_year=edu.end_year,
+            details=edu.details
         ))
 
     # 🔹 5. Skills
@@ -67,6 +89,23 @@ def create_resume_service(db: Session, resume):
         db.add(models.Skill(
             resume_id=db_resume.id,
             skill_name=skill.skill_name
+        ))
+
+    # 🔹 6. Certifications
+    for cert in resume.certifications:
+        db.add(models.Certification(
+            resume_id=db_resume.id,
+            name=cert.name,
+            issuing_organization=cert.issuing_organization,
+            year=cert.year
+        ))
+
+    # 🔹 7. Awards
+    for award in resume.awards:
+        db.add(models.Award(
+            resume_id=db_resume.id,
+            title=award.title,
+            year=award.year
         ))
 
     return db_resume

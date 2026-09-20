@@ -1,0 +1,30 @@
+# AI Resume Builder — direct dependencies
+# Generated from the packages actually imported in backend/ and frontend/,
+# pinned to the versions found installed in the (now git-ignored) v-resume/ venv.
+#
+# Verify once with a clean install before relying on this:
+#   python -m venv .venv && .venv\Scripts\activate
+#   pip install -r requirements.txt
+#   uvicorn backend.main:app --reload   (and separately: streamlit run frontend/app.py)
+
+# --- Backend: FastAPI + DB ---
+fastapi==0.135.3
+uvicorn==0.44.0
+sqlalchemy==2.0.49
+pydantic==2.12.5
+email-validator==2.3.0
+python-dotenv==1.2.2
+
+# --- Schema migrations ---
+alembic==1.18.4
+
+# --- AI + ATS scoring ---
+groq==1.1.2
+scikit-learn==1.8.0
+
+# --- PDF export ---
+reportlab==4.5.0
+
+# --- Frontend ---
+streamlit==1.56.0
+requests==2.33.1

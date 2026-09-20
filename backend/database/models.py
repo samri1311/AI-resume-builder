@@ -1,7 +1,7 @@
 # Database models
 # backend/database/models.py
 
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean, DateTime, JSON, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -16,6 +16,7 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     phone = Column(String)
+    website = Column(String)  # portfolio / LinkedIn / personal site — stable across resumes
     created_at = Column(DateTime, default=datetime.utcnow)
 
     resume = relationship("Resume", back_populates="user", uselist=False)
@@ -27,6 +28,7 @@ class Resume(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String)  # headline shown under the name, e.g. "UX Designer" — varies per resume
     summary = Column(Text)
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -37,6 +39,8 @@ class Resume(Base):
     education = relationship("Education", back_populates="resume", cascade="all, delete")
     skills = relationship("Skill", back_populates="resume", cascade="all, delete")
     ats_scores = relationship("ATSScore", back_populates="resume", cascade="all, delete")
+    certifications = relationship("Certification", back_populates="resume", cascade="all, delete")
+    awards = relationship("Award", back_populates="resume", cascade="all, delete")
 
 
 # ---------------- EXPERIENCES ----------------
@@ -75,6 +79,10 @@ class Education(Base):
     start_year = Column(String)
     end_year = Column(String)
 
+    # Free-text notes rendered as 1-2 bullets under the entry (e.g. "Major in
+    # X", "Thesis on Y") — not a repeatable list, just a couple of lines.
+    details = Column(Text)
+
     resume = relationship("Resume", back_populates="education")
 
 
@@ -98,7 +106,16 @@ class ATSScore(Base):
     resume_id = Column(Integer, ForeignKey("resumes.id"))
 
     job_description = Column(Text)
-    score = Column(Integer)
+    score = Column(Integer)  # legacy column, kept for backward compatibility with older rows
+
+    # Added by backend/database/update_ats_table.py — mapped here so the ORM
+    # actually knows about them (previously the raw ALTER TABLE ran with no
+    # matching model fields, so these columns existed on disk but were
+    # invisible to SQLAlchemy).
+    ats_score = Column(Float)
+    similarity_score = Column(Float)
+    skill_match_score = Column(Float)
+    matched_skills = Column(JSON)
 
     missing_keywords = Column(JSON)
     suggestions = Column(JSON)
@@ -106,3 +123,30 @@ class ATSScore(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     resume = relationship("Resume", back_populates="ats_scores")
+
+
+# ---------------- CERTIFICATIONS ----------------
+class Certification(Base):
+    __tablename__ = "certifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id"))
+
+    name = Column(String, nullable=False)
+    issuing_organization = Column(String)
+    year = Column(String)
+
+    resume = relationship("Resume", back_populates="certifications")
+
+
+# ---------------- AWARDS ----------------
+class Award(Base):
+    __tablename__ = "awards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id"))
+
+    title = Column(String, nullable=False)
+    year = Column(String)
+
+    resume = relationship("Resume", back_populates="awards")

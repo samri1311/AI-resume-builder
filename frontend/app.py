@@ -1,8 +1,15 @@
 # Streamlit frontend application
+import os
+
 import streamlit as st
 import requests
+from dotenv import load_dotenv
 
-BASE_URL = "http://127.0.0.1:8000"
+load_dotenv()
+
+# Was hardcoded to localhost — now overridable via .env / the environment so
+# this can point at a deployed backend without editing source.
+BASE_URL = os.getenv("RESUME_BUILDER_API_URL", "http://127.0.0.1:8000")
 
 # ---------------- SESSION STATE ----------------
 
@@ -27,17 +34,28 @@ if "education" not in st.session_state:
             "degree": "",
             "field_of_study": "",
             "start_year": "",
-            "end_year": ""
+            "end_year": "",
+            "details": ""
         }
     ]
+
+if "certifications" not in st.session_state:
+    st.session_state.certifications = []
+
+if "awards" not in st.session_state:
+    st.session_state.awards = []
 
 
 def render_resume_preview(resume):
     user = resume.get("user", {})
 
     st.subheader(user.get("name", "Resume"))
+
+    if resume.get("title"):
+        st.caption(resume["title"])
+
     contact = " | ".join(
-        item for item in [user.get("email"), user.get("phone")] if item
+        item for item in [user.get("email"), user.get("phone"), user.get("website")] if item
     )
     if contact:
         st.caption(contact)
@@ -88,10 +106,32 @@ def render_resume_preview(resume):
             if details:
                 st.caption(details)
 
+            if edu.get("details"):
+                for line in edu["details"].splitlines():
+                    if line.strip():
+                        st.markdown(f"- {line.strip()}")
+
     skills = [skill.get("skill_name") for skill in resume.get("skills", []) if skill.get("skill_name")]
     if skills:
         st.markdown("#### Skills")
         st.write(", ".join(skills))
+
+    certifications = resume.get("certifications", [])
+    awards = resume.get("awards", [])
+    if certifications or awards:
+        st.markdown("#### Certifications & Awards")
+        for cert in certifications:
+            bit = cert.get("name", "")
+            if cert.get("issuing_organization"):
+                bit += f" ({cert['issuing_organization']})"
+            if cert.get("year"):
+                bit += f", {cert['year']}"
+            st.markdown(f"- {bit}")
+        for award in awards:
+            bit = award.get("title", "")
+            if award.get("year"):
+                bit += f" ({award['year']})"
+            st.markdown(f"- {bit}")
 
 st.set_page_config(page_title="AI Resume Builder", layout="centered")
 
@@ -101,8 +141,10 @@ st.title("🚀 AI Resume Builder")
 st.header("👤 User Info")
 
 name = st.text_input("Name")
+title = st.text_input("Professional Title (e.g. UX Designer)")
 email = st.text_input("Email")
 phone = st.text_input("Phone")
+website = st.text_input("Website / Portfolio / LinkedIn (optional)")
 
 # ---------------- SUMMARY ----------------
 st.header("🧾 Summary")
@@ -246,6 +288,13 @@ for i, edu in enumerate(st.session_state.education):
             key=f"end_year_{i}"
         )
 
+    edu["details"] = st.text_area(
+        "Details (optional, 1-2 short lines — e.g. major, thesis title)",
+        value=edu.get("details", ""),
+        key=f"edu_details_{i}",
+        height=68
+    )
+
     # REMOVE BUTTON
     if len(st.session_state.education) > 1:
         if st.button(f"❌ Remove Education {i+1}", key=f"remove_edu_{i}"):
@@ -261,7 +310,8 @@ if st.button("➕ Add Education"):
         "degree": "",
         "field_of_study": "",
         "start_year": "",
-        "end_year": ""
+        "end_year": "",
+        "details": ""
     })
 
     st.rerun()
@@ -271,23 +321,93 @@ st.header("🛠 Skills")
 
 skills_input = st.text_input("Skills (comma separated)")
 
+# ---------------- CERTIFICATIONS ----------------
+st.header("📜 Certifications")
+
+for i, cert in enumerate(st.session_state.certifications):
+    st.subheader(f"Certification {i+1}")
+
+    cert["name"] = st.text_input(
+        "Certification Name",
+        value=cert.get("name", ""),
+        key=f"cert_name_{i}"
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        cert["issuing_organization"] = st.text_input(
+            "Issuing Organization (optional)",
+            value=cert.get("issuing_organization", ""),
+            key=f"cert_org_{i}"
+        )
+    with col2:
+        cert["year"] = st.text_input(
+            "Year (optional)",
+            value=cert.get("year", ""),
+            key=f"cert_year_{i}"
+        )
+
+    if st.button(f"❌ Remove Certification {i+1}", key=f"remove_cert_{i}"):
+        st.session_state.certifications.pop(i)
+        st.rerun()
+
+    st.divider()
+
+if st.button("➕ Add Certification"):
+    st.session_state.certifications.append({"name": "", "issuing_organization": "", "year": ""})
+    st.rerun()
+
+# ---------------- AWARDS & ACHIEVEMENTS ----------------
+st.header("🏆 Awards & Achievements")
+
+for i, award in enumerate(st.session_state.awards):
+    st.subheader(f"Award {i+1}")
+
+    award["title"] = st.text_input(
+        "Award / Achievement",
+        value=award.get("title", ""),
+        key=f"award_title_{i}"
+    )
+
+    award["year"] = st.text_input(
+        "Year (optional)",
+        value=award.get("year", ""),
+        key=f"award_year_{i}"
+    )
+
+    if st.button(f"❌ Remove Award {i+1}", key=f"remove_award_{i}"):
+        st.session_state.awards.pop(i)
+        st.rerun()
+
+    st.divider()
+
+if st.button("➕ Add Award"):
+    st.session_state.awards.append({"title": "", "year": ""})
+    st.rerun()
+
 # ---------------- AI ENHANCEMENT ----------------
 
 # ---------------- CREATE RESUME ----------------
 if st.button("Create Resume"):
 
     skills_list = [{"skill_name": s.strip()} for s in skills_input.split(",") if s.strip()]
+    certifications_list = [c for c in st.session_state.certifications if c.get("name", "").strip()]
+    awards_list = [a for a in st.session_state.awards if a.get("title", "").strip()]
 
     payload = {
+        "title": title,
         "user": {
             "name": name,
             "email": email,
-            "phone": phone
+            "phone": phone,
+            "website": website
         },
         "summary": summary,
         "experiences": st.session_state.experiences,
         "education": st.session_state.education,
-        "skills": skills_list
+        "skills": skills_list,
+        "certifications": certifications_list,
+        "awards": awards_list
     }
 
     try:

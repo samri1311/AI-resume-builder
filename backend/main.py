@@ -8,7 +8,10 @@ from backend.routes import pdf
 
 
 
-# Create database tables
+# Create database tables.
+# Kept as a safety net for a completely fresh/empty database, but schema
+# CHANGES should now go through Alembic (see alembic/), not edits here —
+# create_all() only ever adds missing tables, it can't alter existing ones.
 models.Base.metadata.create_all(bind=engine)
 
 # Create FastAPI app instance

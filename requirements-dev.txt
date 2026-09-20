@@ -1,0 +1,7 @@
+# Dev-only dependencies — needed to run the test suite, not to run the app.
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest backend/tests
+#
+# Not pinned to a version found on this machine (pytest wasn't installed in
+# the project's venv before this pass) — a recent 8.x release is fine.
+pytest>=8.0,<9

@@ -11,6 +11,7 @@ class UserBase(BaseModel):
     name: str
     email: EmailStr
     phone: Optional[str] = None
+    website: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -55,6 +56,10 @@ class EducationBase(BaseModel):
     field_of_study: Optional[str] = None
     start_year: Optional[str] = None
     end_year: Optional[str] = None
+    # Free-text, meant to hold 1-2 short lines (e.g. "Major in X", "Thesis on
+    # Y") — not enforced beyond a generous length cap, this is a soft guard,
+    # not a bullet counter.
+    details: Optional[str] = Field(default=None, max_length=300)
 
 
 class EducationCreate(EducationBase):
@@ -84,6 +89,41 @@ class SkillResponse(SkillBase):
         from_attributes = True
 
 
+# ---------------- CERTIFICATIONS ----------------
+class CertificationBase(BaseModel):
+    name: str
+    issuing_organization: Optional[str] = None
+    year: Optional[str] = None
+
+
+class CertificationCreate(CertificationBase):
+    pass
+
+
+class CertificationResponse(CertificationBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+# ---------------- AWARDS ----------------
+class AwardBase(BaseModel):
+    title: str
+    year: Optional[str] = None
+
+
+class AwardCreate(AwardBase):
+    pass
+
+
+class AwardResponse(AwardBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
 # ---------------- ATS SCORE ----------------
 class ATSScoreBase(BaseModel):
     job_description: str
@@ -106,6 +146,7 @@ class ATSScoreResponse(ATSScoreBase):
 
 # ---------------- RESUME ----------------
 class ResumeBase(BaseModel):
+    title: Optional[str] = None
     summary: Optional[str] = None
 
 
@@ -114,6 +155,8 @@ class ResumeCreate(ResumeBase):
     experiences: List[ExperienceCreate] = Field(default_factory=list)
     education: List[EducationCreate] = Field(default_factory=list)
     skills: List[SkillCreate] = Field(default_factory=list)
+    certifications: List[CertificationCreate] = Field(default_factory=list)
+    awards: List[AwardCreate] = Field(default_factory=list)
 
 
 class ResumeResponse(ResumeBase):
@@ -122,6 +165,8 @@ class ResumeResponse(ResumeBase):
     experiences: List[ExperienceResponse]
     education: List[EducationResponse]
     skills: List[SkillResponse]
+    certifications: List[CertificationResponse]
+    awards: List[AwardResponse]
     created_at: datetime
     updated_at: datetime
 
