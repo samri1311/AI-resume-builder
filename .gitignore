@@ -3,5 +3,12 @@
 v-resume
 __pycache__/
 *.pyc
+.pytest_cache/
+.venv/
 venv/
+v-resume/
 resumes.db
+*.db
+generated/
+Claude outputs/
+.env.example
