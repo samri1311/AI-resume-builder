@@ -127,3 +127,79 @@ def calculate_ats_score(resume, job_description: str):
         "missing_keywords": missing_keywords[:10],
         "suggestions": suggestions
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase B (pivot: paste a job description + background -> tailored draft).
+#
+# calculate_ats_score() above reads resume.summary / .experiences[].description
+# / .ai_description / .education[].degree / .field_of_study / .skills[].skill_name
+# off whatever object it's handed - it was written against a saved
+# models.Resume, but never actually checks that it IS one. Before a draft is
+# saved there's no such object yet, only the plain dict parse_background()
+# returns (see backend/schemas/draft.py). Rather than duplicate the
+# scoring/matching logic for that case, these small shim classes just expose
+# the same attributes calculate_ats_score already reads, built from that
+# dict, so the exact same scoring logic runs unchanged either way.
+# ---------------------------------------------------------------------------
+
+class _ShimExperience:
+    def __init__(self, description=None):
+        self.description = description
+        self.ai_description = []  # a draft has no AI-enhanced bullets yet
+
+
+class _ShimEducation:
+    def __init__(self, degree=None, field_of_study=None):
+        self.degree = degree
+        self.field_of_study = field_of_study
+
+
+class _ShimSkill:
+    def __init__(self, skill_name):
+        self.skill_name = skill_name
+
+
+class _ShimResume:
+    def __init__(self, summary, experiences, education, skills):
+        self.summary = summary
+        self.experiences = experiences
+        self.education = education
+        self.skills = skills
+
+
+def _resume_shim_from_parsed_background(parsed_background: dict) -> _ShimResume:
+    """parsed_background = a ParsedBackground.model_dump()-shaped dict, as
+    returned by ai_engine.parse_background()'s "data" field."""
+    return _ShimResume(
+        summary=parsed_background.get("summary"),
+        experiences=[
+            _ShimExperience(description=exp.get("description"))
+            for exp in parsed_background.get("experiences") or []
+        ],
+        education=[
+            _ShimEducation(
+                degree=edu.get("degree"),
+                field_of_study=edu.get("field_of_study"),
+            )
+            for edu in parsed_background.get("education") or []
+        ],
+        skills=[
+            _ShimSkill(skill_name=skill)
+            for skill in parsed_background.get("skills") or []
+            if skill  # a blank/None entry would otherwise crash .lower() in compute_skill_match
+        ],
+    )
+
+
+def calculate_ats_score_for_draft(parsed_background: dict, job_description: str) -> dict:
+    """Same return shape as calculate_ats_score, but for a not-yet-saved
+    draft (a ParsedBackground dict) rather than a persisted models.Resume.
+
+    Used to find which of the job description's keywords the draft is
+    still missing, so the Phase B tailoring calls can be told what to
+    naturally work in - see ai_engine.enhance_experience_for_job and
+    generate_tailored_summary's missing_keywords parameter.
+    """
+    shim = _resume_shim_from_parsed_background(parsed_background)
+    return calculate_ats_score(shim, job_description)

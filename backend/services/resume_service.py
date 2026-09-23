@@ -7,10 +7,18 @@ from backend.database import models
 from backend.services.ai_engine import enhance_experience_async
 
 
-async def _enhance_or_skip(description):
-    if not description:
+async def _enhance_or_skip(exp):
+    # Phase 1: if the client already ran the "Enhance Experience" preview
+    # and sent back bullets for this exact description, trust them instead
+    # of calling Groq again here - Groq's output isn't deterministic, so a
+    # second independent call could silently disagree with what the user
+    # already saw and approved. Only fall through to calling Groq when
+    # there's nothing usable from the client (ai_description is empty).
+    if exp.ai_description:
+        return {"success": True, "data": exp.ai_description}
+    if not exp.description:
         return {"success": False, "data": []}
-    return await enhance_experience_async(description)
+    return await enhance_experience_async(exp.description)
 
 
 async def _enhance_all(experiences):
@@ -18,7 +26,7 @@ async def _enhance_all(experiences):
     # building the gather() call before asyncio.run() has started one
     # raises "a coroutine was expected, got <_GatheringFuture ...>", so this
     # wrapper is what actually gets handed to asyncio.run() below.
-    return await asyncio.gather(*[_enhance_or_skip(exp.description) for exp in experiences])
+    return await asyncio.gather(*[_enhance_or_skip(exp) for exp in experiences])
 
 
 def create_resume_service(db: Session, resume):

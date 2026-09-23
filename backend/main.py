@@ -5,6 +5,7 @@ from backend.database import models
 from backend.routes import resume, ai
 from backend.routes import ats
 from backend.routes import pdf
+from backend.routes import draft
 
 
 
@@ -31,6 +32,8 @@ app.include_router(resume.router)
 app.include_router(ai.router)  
 app.include_router(ats.router)
 app.include_router(pdf.router)
+# Phase C (pivot): paste a job description + background -> tailored draft
+app.include_router(draft.router)
 # Health check route (optional but useful)
 @app.get("/health")
 def health_check():

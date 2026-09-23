@@ -38,7 +38,13 @@ class ExperienceBase(BaseModel):
 
 
 class ExperienceCreate(ExperienceBase):
-    pass
+    # Phase 1: lets the client send bullets it already generated (via the
+    # "Enhance Experience" preview button) so resume_service can reuse them
+    # instead of silently calling Groq a second time with possibly
+    # different, non-deterministic output. Empty by default - anything
+    # that reaches resume_service with an empty list here still gets
+    # enhanced there exactly as before.
+    ai_description: List[str] = Field(default_factory=list)
 
 
 class ExperienceResponse(ExperienceBase):
