@@ -120,6 +120,14 @@ class ATSScore(Base):
     missing_keywords = Column(JSON)
     suggestions = Column(JSON)
 
+    # Phase E (ATS score explainability): the counts behind skill_match_score
+    # and the new "relevant experience" metric, so the frontend can show
+    # "3 of 8 skills matched" instead of just a bare percentage.
+    matched_skills_count = Column(Integer)
+    total_skills_count = Column(Integer)
+    relevant_experience_count = Column(Integer)
+    total_experience_count = Column(Integer)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     resume = relationship("Resume", back_populates="ats_scores")

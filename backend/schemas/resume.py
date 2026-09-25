@@ -55,6 +55,16 @@ class ExperienceResponse(ExperienceBase):
         from_attributes = True
 
 
+# Phase F (ATS suggestions -> action bridge): lets an already-saved
+# experience be updated in place by id, instead of only ever being created
+# once. Both fields are optional so a caller can update just the summary,
+# or just one experience's ai_description, without resending everything.
+class ExperienceUpdate(BaseModel):
+    id: int
+    description: Optional[str] = None
+    ai_description: Optional[List[str]] = None
+
+
 # ---------------- EDUCATION ----------------
 class EducationBase(BaseModel):
     college: str
@@ -178,3 +188,13 @@ class ResumeResponse(ResumeBase):
 
     class Config:
         from_attributes = True
+
+
+# Phase F (ATS suggestions -> action bridge)
+class ResumeUpdate(BaseModel):
+    summary: Optional[str] = None
+    experiences: List[ExperienceUpdate] = Field(default_factory=list)
+
+
+class TailorPreviewRequest(BaseModel):
+    job_description: str

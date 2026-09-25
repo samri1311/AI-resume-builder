@@ -117,3 +117,40 @@ def create_resume_service(db: Session, resume):
         ))
 
     return db_resume
+
+
+# ---------------------------------------------------------------------------
+# Phase F (ATS suggestions -> action bridge): until now the only way to
+# change a resume was to create a new one - there was no way to save an
+# edit to one that already exists. This is deliberately narrow (summary +
+# per-experience description/ai_description by id) rather than a full
+# replace, since that's all the "Tailor My Resume to This Job" preview
+# needs to save - not a general-purpose resume editor.
+# ---------------------------------------------------------------------------
+def update_resume_service(db: Session, resume_id: int, update):
+    db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
+    if not db_resume:
+        raise ValueError(f"Resume {resume_id} not found")
+
+    if update.summary is not None:
+        db_resume.summary = update.summary
+
+    if update.experiences:
+        # Load once, keyed by id, rather than one query per experience update.
+        experiences_by_id = {exp.id: exp for exp in db_resume.experiences}
+
+        for exp_update in update.experiences:
+            db_exp = experiences_by_id.get(exp_update.id)
+            if not db_exp:
+                # An id that doesn't belong to this resume (wrong resume,
+                # typo, stale client state) is silently ignored rather than
+                # raising - the rest of a legitimate update shouldn't fail
+                # over one bad id.
+                continue
+
+            if exp_update.description is not None:
+                db_exp.description = exp_update.description
+            if exp_update.ai_description is not None:
+                db_exp.ai_description = exp_update.ai_description
+
+    return db_resume

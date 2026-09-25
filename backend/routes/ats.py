@@ -49,6 +49,11 @@ def calculate_score(request: ATSRequest, db: Session = Depends(get_db)):
         matched_skills=result["matched_skills"],
         missing_keywords=result["missing_keywords"],
         suggestions=result["suggestions"],
+        # Phase E (ATS score explainability)
+        matched_skills_count=result["matched_skills_count"],
+        total_skills_count=result["total_skills_count"],
+        relevant_experience_count=result["relevant_experience_count"],
+        total_experience_count=result["total_experience_count"],
     )
     db.add(score_row)
     db.commit()

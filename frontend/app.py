@@ -74,6 +74,11 @@ if "experiences" not in st.session_state:
             # actually generated from, so we can tell later if it's gone
             # stale (see the invalidation check in the Experience loop).
             "ai_description_source": "",
+            # Phase F: a proposed-but-not-yet-applied Enhance Experience
+            # result, and the description text it was generated from.
+            "_pending_ai_bullets": [],
+            "_pending_ai_source": "",
+            "_pending_ai_style": "",
             "is_current": False
         }
     ]
@@ -516,14 +521,61 @@ if entry_mode == "Build manually" or st.session_state.get("draft_ready"):
             exp["ai_description"] = []
             exp["ai_description_source"] = ""
 
-        if st.button("✨ Enhance Experience", key=f"enhance_{i}"):
+        # Phase F: same invalidation, but for a PENDING proposal that hasn't
+        # been applied yet - if the description changes while a proposal is
+        # sitting there unapplied, that proposal no longer describes this
+        # experience either.
+        if exp.get("_pending_ai_bullets") and exp["description"] != exp.get("_pending_ai_source"):
+            exp["_pending_ai_bullets"] = []
+            exp["_pending_ai_source"] = ""
+
+        # Phase F: the applied AI version used to be invisible after the
+        # instant it was generated (the "AI Enhanced Experience!" message
+        # only showed inside the same script run as the button click) even
+        # though ai_description was quietly the thing actually used
+        # everywhere (ATS scoring, the PDF). Now it's a persistent, visible
+        # state with an explicit way back.
+        if exp.get("ai_description"):
+            st.caption("✓ Using the AI-enhanced version below for this experience.")
+            for b in exp["ai_description"]:
+                st.write(f"- {b}")
+            if st.button("↩️ Revert to Original Description", key=f"revert_{i}"):
+                exp["ai_description"] = []
+                exp["ai_description_source"] = ""
+                st.rerun()
+
+        # Phase G: ai_engine.py has always supported three distinct rewrite
+        # styles (professional/impactful/concise - see
+        # ai_engine._build_system_prompt), but the frontend never actually
+        # exposed a way to pick one - "Enhance Experience" hardcoded
+        # "professional" every time. That's also why regenerating looked
+        # like nothing changed: the same description, through the same
+        # style prompt, tends to converge on near-identical phrasing.
+        style_labels = {"Professional": "professional", "Impactful": "impactful", "Concise": "concise"}
+        selected_style_label = st.selectbox(
+            "Enhancement Style",
+            options=list(style_labels.keys()),
+            key=f"enhance_style_{i}",
+        )
+        selected_style = style_labels[selected_style_label]
+
+        # Phase G: a pending proposal generated under a different style no
+        # longer reflects what's currently selected - same invalidation
+        # philosophy as the description-change checks above.
+        if exp.get("_pending_ai_bullets") and exp.get("_pending_ai_style") != selected_style:
+            exp["_pending_ai_bullets"] = []
+            exp["_pending_ai_source"] = ""
+            exp["_pending_ai_style"] = ""
+
+        button_label = "🔁 Regenerate AI Version" if exp.get("ai_description") else "✨ Enhance Experience"
+        if st.button(button_label, key=f"enhance_{i}"):
             try:
                 # Phase 2: explicit timeout so a slow/hung backend doesn't
                 # freeze this button forever with no feedback.
                 res = requests.post(f"{BASE_URL}/ai/enhance",
                                     json={
                                         "text": exp["description"],
-                                        "style": "professional"
+                                        "style": selected_style
                                     },
                                     timeout=30)
                 data = res.json()
@@ -531,15 +583,14 @@ if entry_mode == "Build manually" or st.session_state.get("draft_ready"):
                 # unexpected response shape can't crash this with a raw
                 # KeyError - it just falls through to the error branch.
                 if data.get("success"):
-                    bullets = data.get("data", {}).get("bullets", [])
-                    exp["ai_description"] = bullets
-                    # Phase 1: remember which description text these bullets
-                    # correspond to, so the invalidation check above can tell
-                    # if the description changes after this.
-                    exp["ai_description_source"] = exp["description"]
-                    st.success("AI Enhanced Experience!")
-                    for b in bullets:
-                        st.write(f"- {b}")
+                    # Phase F: proposed, not yet applied - "Enhance
+                    # Experience" used to write straight to ai_description
+                    # with no review step. Stashing it as a pending
+                    # proposal instead means nothing changes until the
+                    # person explicitly clicks Apply below.
+                    exp["_pending_ai_bullets"] = data.get("data", {}).get("bullets", [])
+                    exp["_pending_ai_source"] = exp["description"]
+                    exp["_pending_ai_style"] = selected_style
                 else:
                     st.error(data.get("message", "Failed to enhance experience"))
 
@@ -549,6 +600,31 @@ if entry_mode == "Build manually" or st.session_state.get("draft_ready"):
                 st.error("The AI enhancement request timed out. Please try again.")
             except Exception as e:
                 st.error(f"Error: {e}")
+
+        # Phase F: the proposal stays visible (and re-appears on every
+        # rerun) until the person explicitly applies or discards it -
+        # instead of flashing once and then only living on invisibly in
+        # session state.
+        if exp.get("_pending_ai_bullets"):
+            st.info("Proposed AI-Enhanced Version:")
+            for b in exp["_pending_ai_bullets"]:
+                st.write(f"- {b}")
+
+            pending_col1, pending_col2 = st.columns(2)
+            with pending_col1:
+                if st.button("✅ Apply This Version", key=f"apply_enhance_{i}"):
+                    exp["ai_description"] = exp["_pending_ai_bullets"]
+                    exp["ai_description_source"] = exp["_pending_ai_source"]
+                    exp["_pending_ai_bullets"] = []
+                    exp["_pending_ai_source"] = ""
+                    exp["_pending_ai_style"] = ""
+                    st.rerun()
+            with pending_col2:
+                if st.button("✖️ Discard", key=f"discard_enhance_{i}"):
+                    exp["_pending_ai_bullets"] = []
+                    exp["_pending_ai_source"] = ""
+                    exp["_pending_ai_style"] = ""
+                    st.rerun()
 
 
         # REMOVE BUTTON
@@ -570,6 +646,9 @@ if entry_mode == "Build manually" or st.session_state.get("draft_ready"):
             "description": "",
             "ai_description": [],
             "ai_description_source": "",  # Phase 1: see note in the initial seed above.
+            "_pending_ai_bullets": [],
+            "_pending_ai_source": "",  # Phase F: see note in the initial seed above.
+            "_pending_ai_style": "",  # Phase G: see note in the initial seed above.
             "is_current": False
         })
 
@@ -789,51 +868,204 @@ else:
 # ---------------- ATS SCORE ----------------
 st.header("📊 ATS Score")
 
+
+def _check_ats_score(resume_id, job_description):
+    """Phase F: pulled out of the button's if-block so both "Check ATS
+    Score" and the auto-recheck after applying a tailoring preview can call
+    the same thing. Stores the result in session_state (rather than a
+    local variable) so it - and the "Tailor My Resume to This Job" button
+    below it - survive reruns triggered by unrelated widgets."""
+    try:
+        # Phase 2: explicit timeout.
+        res = requests.post(
+            f"{BASE_URL}/ats/score",
+            json={"resume_id": resume_id, "job_description": job_description},
+            timeout=30
+        )
+        data = res.json()
+
+        if data.get("success"):
+            st.session_state["last_ats_result"] = data.get("data", {})
+            st.session_state["last_ats_job_description"] = job_description
+        else:
+            st.session_state["last_ats_result"] = None
+            st.error(data.get("message", "ATS scoring failed"))
+
+    # Phase 2: dedicated Timeout branch.
+    except requests.exceptions.Timeout:
+        st.error("The ATS score request timed out. Please try again.")
+    except Exception as e:
+        st.error(f"Error: {e}")
+
+
 if "resume_id" in st.session_state:
-    jd = st.text_area("Paste Job Description")
+    jd = st.text_area("Paste Job Description", key="ats_job_description")
 
     if st.button("Check ATS Score"):
+        _check_ats_score(st.session_state["resume_id"], jd)
 
-        payload = {
-            "resume_id": st.session_state["resume_id"],
-            "job_description": jd
-        }
+    result = st.session_state.get("last_ats_result")
 
-        try:
-            # Phase 2: explicit timeout.
-            res = requests.post(f"{BASE_URL}/ats/score", json=payload, timeout=30)
-            data = res.json()
+    # Phase F: only show results for the job description they were
+    # actually computed against - if the person edits the text area after
+    # checking, the numbers below no longer describe what's currently
+    # pasted there.
+    if result and st.session_state.get("last_ats_job_description") == jd:
 
-            # Phase 4: .get(...) instead of data["success"] / data["message"],
-            # and result.get(...) instead of result[...] below, so a
-            # missing key shows a message instead of a raw KeyError.
-            if data.get("success"):
-                result = data.get("data", {})
+        if st.session_state.pop("_resume_updated_flag", False):
+            st.success("Resume updated - your ATS score below has been refreshed.")
 
-                st.subheader("📈 Results")
+        st.subheader("📈 Results")
 
-                st.metric("ATS Score", f"{result.get('ats_score', 0)}%")
-                st.metric("Similarity", f"{result.get('similarity_score', 0)}%")
-                st.metric("Skill Match", f"{result.get('skill_match_score', 0)}%")
+        # Phase E: each number now sits next to the explanation for
+        # why it is what it is, instead of three bare percentages
+        # with the supporting detail scattered further down the page.
+        skills_matched = result.get("matched_skills_count", 0)
+        skills_total = result.get("total_skills_count", 0)
+        exp_relevant = result.get("relevant_experience_count", 0)
+        exp_total = result.get("total_experience_count", 0)
 
-                st.subheader("✅ Matched Skills")
-                st.write(result.get("matched_skills", []))
+        col1, col2, col3 = st.columns(3)
 
-                st.subheader("❌ Missing Keywords")
-                st.write(result.get("missing_keywords", []))
+        with col1:
+            st.metric("ATS Score", f"{result.get('ats_score', 0)}%")
+            st.caption("70% wording similarity + 30% skill match.")
 
-                st.subheader("💡 Suggestions")
-                for s in result.get("suggestions", []):
-                    st.write(f"- {s}")
-
+        with col2:
+            st.metric("Skill Match", f"{result.get('skill_match_score', 0)}%")
+            if skills_total:
+                st.caption(f"{skills_matched} of {skills_total} listed skills appear in this job description.")
             else:
-                st.error(data.get("message", "ATS scoring failed"))
+                st.caption("No skills listed on this resume yet.")
 
-        # Phase 2: dedicated Timeout branch.
-        except requests.exceptions.Timeout:
-            st.error("The ATS score request timed out. Please try again.")
-        except Exception as e:
-            st.error(f"Error: {e}")
+        with col3:
+            st.metric("Relevant Experience", f"{exp_relevant}/{exp_total}" if exp_total else "0/0")
+            if exp_total:
+                st.caption(f"{exp_relevant} of {exp_total} experience entries closely relate to this job description.")
+            else:
+                st.caption("No experience entries to compare yet.")
+
+        st.caption(f"Wording similarity to the job description: {result.get('similarity_score', 0)}%.")
+
+        st.subheader("✅ Matched Skills")
+        matched = result.get("matched_skills", [])
+        st.write(", ".join(matched) if matched else "None of your listed skills were found in this job description.")
+
+        st.subheader("❌ Missing Keywords")
+        missing = result.get("missing_keywords", [])
+        st.write(", ".join(missing) if missing else "No notable missing keywords found.")
+
+        st.subheader("💡 Suggestions")
+        for s in result.get("suggestions", []):
+            st.write(f"- {s}")
+
+        # ---------------- TAILOR TO THIS JOB (Phase F) ----------------
+        # The bridge from "here's what's wrong" to "here's how to fix it" -
+        # reuses the exact same tailoring calls the "Generate from Job
+        # Description" flow uses higher up the page, just pointed at this
+        # already-saved resume's real experiences/summary instead of a
+        # freeform background.
+        st.subheader("🪄 Act on These Suggestions")
+
+        if st.button("✨ Tailor My Resume to This Job"):
+            try:
+                res = requests.post(
+                    f"{BASE_URL}/resume/{st.session_state['resume_id']}/tailor-preview",
+                    json={"job_description": jd},
+                    timeout=90
+                )
+                data = res.json()
+                if data.get("success"):
+                    st.session_state["tailor_preview"] = data.get("data")
+                else:
+                    st.error(data.get("message", "Could not generate a tailoring preview"))
+            except requests.exceptions.Timeout:
+                st.error("The tailoring request timed out. Please try again.")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+        preview = st.session_state.get("tailor_preview")
+        if preview:
+            st.caption(
+                "Nothing is saved yet - review the AI-tailored version below, then Apply "
+                "if you want to keep it."
+            )
+
+            st.markdown("**Summary**")
+            sum_col1, sum_col2 = st.columns(2)
+            with sum_col1:
+                st.caption("Current")
+                st.write(preview.get("original_summary") or "_(none)_")
+            with sum_col2:
+                st.caption("AI-Tailored")
+                st.write(preview.get("tailored_summary") or "_(no change proposed)_")
+
+            for exp_preview in preview.get("experiences", []):
+                st.markdown(f"**{exp_preview.get('job_title') or 'Experience'}**")
+                exp_col1, exp_col2 = st.columns(2)
+
+                with exp_col1:
+                    st.caption("Current")
+                    current_bullets = exp_preview.get("current_ai_description") or []
+                    if current_bullets:
+                        for b in current_bullets:
+                            st.write(f"- {b}")
+                    else:
+                        st.write(exp_preview.get("original_description") or "_(none)_")
+
+                with exp_col2:
+                    st.caption("AI-Tailored")
+                    tailored_bullets = exp_preview.get("tailored_bullets") or []
+                    if tailored_bullets:
+                        for b in tailored_bullets:
+                            st.write(f"- {b}")
+                    else:
+                        st.write("_(no change proposed)_")
+
+            apply_col, discard_col = st.columns(2)
+
+            with apply_col:
+                if st.button("✅ Apply All Changes"):
+                    update_payload = {
+                        "summary": preview.get("tailored_summary"),
+                        "experiences": [
+                            {"id": e["id"], "ai_description": e["tailored_bullets"]}
+                            for e in preview.get("experiences", [])
+                            if e.get("tailored_bullets")
+                        ],
+                    }
+                    try:
+                        res = requests.put(
+                            f"{BASE_URL}/resume/{st.session_state['resume_id']}",
+                            json=update_payload,
+                            timeout=30
+                        )
+                        if res.status_code == 200:
+                            st.session_state["resume"] = res.json()
+                            st.session_state["tailor_preview"] = None
+                            # Auto re-check, so the improvement shows up
+                            # immediately instead of asking the person to
+                            # click "Check ATS Score" again themselves.
+                            _check_ats_score(st.session_state["resume_id"], jd)
+                            # A message written here would never actually
+                            # reach the browser - st.rerun() below discards
+                            # this run's output immediately. Stashing a flag
+                            # and showing the message on the NEW run instead
+                            # (right where the refreshed numbers render) is
+                            # what actually makes it visible.
+                            st.session_state["_resume_updated_flag"] = True
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to update resume (status {res.status_code}).")
+                    except requests.exceptions.Timeout:
+                        st.error("Updating the resume timed out. Please try again.")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+            with discard_col:
+                if st.button("✖️ Discard Preview"):
+                    st.session_state["tailor_preview"] = None
+                    st.rerun()
 
 else:
     st.info("Create a resume first")

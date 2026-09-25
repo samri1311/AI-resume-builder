@@ -31,6 +31,8 @@ def test_draft_adapter_matches_calculate_ats_score_for_well_matched_job():
     assert set(result["matched_skills"]) == {"python", "fastapi", "sql"}
     assert isinstance(result["missing_keywords"], list)
     assert isinstance(result["suggestions"], list)
+    assert result["matched_skills_count"] == 3
+    assert result["total_skills_count"] == 3
 
 
 def test_draft_adapter_flags_unrelated_job_description():
@@ -40,7 +42,7 @@ def test_draft_adapter_flags_unrelated_job_description():
 
     assert result["matched_skills"] == []
     assert result["skill_match_score"] == 0
-    assert "Improve alignment with job description" in result["suggestions"]
+    assert any("Improve alignment with job description" in s for s in result["suggestions"])
 
 
 def test_draft_adapter_handles_missing_optional_fields_without_crashing():
