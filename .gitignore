@@ -11,4 +11,3 @@ resumes.db
 *.db
 generated/
 Claude outputs/
-.env.example
